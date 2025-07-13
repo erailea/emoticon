@@ -24,11 +24,7 @@ os.makedirs(STORAGE_DIR, exist_ok=True)
 # In-memory storage for active sessions
 active_sessions = {}
 
-# Pydantic models
-class InputData(BaseModel):
-    sessionId: str
-    inputs: List[Dict[str, Any]]  # [{"timestamp": float, "file": str}]
-
+# Pydantic models (removed InputData since we're using form-data now)
 class EmotionResult(BaseModel):
     timestamp: float
     value: float
@@ -39,15 +35,15 @@ class SessionResult(BaseModel):
 
 def save_session(session_id: str, data: dict):
     """Save session data to file"""
-    file_path = os.path.join(STORAGE_DIR, f"{session_id}.json")
-    with open(file_path, 'w') as f:
+    session_file = os.path.join(STORAGE_DIR, f"{session_id}.json")
+    with open(session_file, 'w') as f:
         json.dump(data, f, indent=2)
 
 def load_session(session_id: str) -> dict:
     """Load session data from file"""
-    file_path = os.path.join(STORAGE_DIR, f"{session_id}.json")
-    if os.path.exists(file_path):
-        with open(file_path, 'r') as f:
+    session_file = os.path.join(STORAGE_DIR, f"{session_id}.json")
+    if os.path.exists(session_file):
+        with open(session_file, 'r') as f:
             return json.load(f)
     return None
 
@@ -58,26 +54,17 @@ def analyze_emotions(inputs: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, f
     for item in inputs:
         try:
             timestamp = item["timestamp"]
-            file_data = item["file"]
+            file_path = item["file"]
             
-            # Handle base64 encoded image
-            if isinstance(file_data, str) and file_data.startswith('data:image'):
-                # Extract base64 data
-                base64_data = file_data.split(',')[1]
-                image_bytes = base64.b64decode(base64_data)
-                
-                # Create temporary file
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
-                    tmp_file.write(image_bytes)
-                    tmp_file_path = tmp_file.name
-            else:
-                # Assume it's a file path
-                tmp_file_path = file_data
+            # Verify file exists
+            if not os.path.exists(file_path):
+                print(f"Warning: File {file_path} not found")
+                continue
             
             # Analyze emotions using DeepFace
             try:
                 analysis = DeepFace.analyze(
-                    img_path=tmp_file_path,
+                    img_path=file_path,
                     actions=['emotion'],
                     enforce_detection=False
                 )
@@ -88,7 +75,7 @@ def analyze_emotions(inputs: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, f
                 else:
                     emotion_data = analysis['emotion']
                 
-                print(emotion_data)
+                print(f"Analyzed {file_path}: {emotion_data}")
 
                 # Store results for each emotion
                 for emotion, value in emotion_data.items():
@@ -98,7 +85,7 @@ def analyze_emotions(inputs: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, f
                     })
                     
             except Exception as e:
-                print(f"Error analyzing image: {e}")
+                print(f"Error analyzing image {file_path}: {e}")
                 # If analysis fails, add default values
                 default_emotions = ['happy', 'sad', 'angry', 'surprise', 'fear', 'disgust', 'neutral']
                 for emotion in default_emotions:
@@ -106,13 +93,6 @@ def analyze_emotions(inputs: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, f
                         "timestamp": timestamp,
                         "value": 0.0
                     })
-            
-            # Clean up temporary file if created
-            if 'tmp_file_path' in locals() and tmp_file_path != file_data:
-                try:
-                    os.unlink(tmp_file_path)
-                except:
-                    pass
                     
         except Exception as e:
             print(f"Error processing input: {e}")
@@ -140,31 +120,82 @@ async def start_session():
     return {"sessionId": session_id}
 
 @app.post("/")
-async def upload_inputs(data: InputData):
-    """Upload timestamp and file pairs for analysis"""
-    session_id = data.sessionId
+async def upload_inputs(
+    sessionId: str = Form(...),
+    timestamps: str = Form(...),  # JSON string of timestamps array
+    files: List[UploadFile] = File(...)
+):
+    """Upload timestamp and file pairs for analysis via form-data"""
+    
+    # Parse timestamps from JSON string
+    try:
+        timestamp_list = json.loads(timestamps)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid timestamps format. Must be JSON array.")
+    
+    # Validate that we have equal number of files and timestamps
+    if len(files) != len(timestamp_list):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Number of files ({len(files)}) must match number of timestamps ({len(timestamp_list)})"
+        )
     
     # Check if session exists
-    if session_id not in active_sessions:
+    if sessionId not in active_sessions:
         # Try to load from file
-        session_data = load_session(session_id)
+        session_data = load_session(sessionId)
         if not session_data:
             raise HTTPException(status_code=404, detail="Session not found")
-        active_sessions[session_id] = session_data
+        active_sessions[sessionId] = session_data
     
-    session = active_sessions[session_id]
+    session = active_sessions[sessionId]
     
     # Check if session is still active
     if session.get("status") != "active":
         raise HTTPException(status_code=400, detail="Session is not active")
     
+    # Process uploaded files
+    processed_inputs = []
+    
+    for i, (file, timestamp) in enumerate(zip(files, timestamp_list)):
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"File {i+1} is not a valid image. Content type: {file.content_type}"
+            )
+        
+        # Create unique filename for this session
+        file_extension = file.filename.split('.')[-1] if '.' in file.filename and '.' in file.filename else 'jpg'
+        unique_filename = f"{sessionId}_{i}_{int(timestamp*1000)}.{file_extension}"
+        file_path = os.path.join(STORAGE_DIR, unique_filename)
+        
+        # Save uploaded file
+        try:
+            content = await file.read()
+            with open(file_path, "wb") as buffer:
+                buffer.write(content)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error saving file {i+1}: {str(e)}")
+        
+        # Add to processed inputs
+        processed_inputs.append({
+            "timestamp": timestamp,
+            "file": file_path,
+            "original_filename": file.filename if file.filename else f"file_{i}.jpg"
+        })
+    
     # Add inputs to session
-    session["inputs"].extend(data.inputs)
+    session["inputs"].extend(processed_inputs)
     
     # Save updated session
-    save_session(session_id, session)
+    save_session(sessionId, session)
     
-    return {"message": "Inputs uploaded successfully", "inputsCount": len(session["inputs"])}
+    return {
+        "message": "Files uploaded successfully", 
+        "inputsCount": len(session["inputs"]),
+        "uploadedFiles": len(files)
+    }
 
 @app.get("/end")
 async def end_session(sessionId: str):

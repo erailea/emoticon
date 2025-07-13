@@ -154,19 +154,65 @@ cython_debug/
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be added to the global gitignore or merged into this project gitignore.  For a PyCharm
-#  project, it is recommended to ignore entire .idea/ folder.
+#  be added to the global gitignore or merged into this project gitignore.  For a clean
+#  developer experience, merge this file with the global gitignore.
+#   https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 .idea/
 
-# Visual Studio Code
+# VS Code
 .vscode/
 
-# Vim
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# Project specific
+# Session data storage - exclude uploaded image files but keep session JSON files
+storage/*.jpg
+storage/*.jpeg
+storage/*.png
+storage/*.gif
+storage/*.bmp
+storage/*.tiff
+storage/*.webp
+# Keep session JSON files
+!storage/*.json
+# Keep the .gitkeep file to maintain directory structure
+!storage/.gitkeep
+
+# DeepFace model cache (can be large)
+.deepface/
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Application logs
+*.log
+logs/
+
+# IDE and editor files
 *.swp
 *.swo
-
-# Emacs
 *~
+.vscode/
+.idea/
+*.sublime-*
 
 # OS generated files
 .DS_Store
@@ -175,46 +221,4 @@ cython_debug/
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db
-
-# Project specific - Session storage
-storage/*.json
-storage/*
-!storage/.gitkeep
-
-# Docker
-.dockerignore
-docker-compose.override.yml
-.docker/
-
-# Logs
-*.log
-logs/
-
-# Temporary files
-*.tmp
-*.temp
-temp/
-tmp/
-
-# API keys and secrets
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-secrets.json
-
-# TensorFlow model cache (DeepFace)
-.deepface/
-
-# Test outputs
-test_output/
-test_results/
-
-# Coverage reports
-htmlcov/
-.coverage
-
-# Local development
-local_config.py
-dev_settings.py 
+Thumbs.db 

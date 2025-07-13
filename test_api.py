@@ -6,18 +6,11 @@ Tests all endpoints with the provided test.jpg image
 
 import requests
 import json
-import base64
 import os
 from typing import Dict, Any
 
 # API base URL
-BASE_URL = "http://localhost:8000"
-
-def encode_image_to_base64(image_path: str) -> str:
-    """Encode image to base64 string"""
-    with open(image_path, "rb") as image_file:
-        encoded_string = base64.b64encode(image_file.read()).decode()
-        return f"data:image/jpeg;base64,{encoded_string}"
+BASE_URL = "http://localhost:8765"
 
 def test_start_session() -> str:
     """Test the /start endpoint"""
@@ -35,35 +28,48 @@ def test_start_session() -> str:
         return None
 
 def test_upload_inputs(session_id: str, image_path: str) -> bool:
-    """Test the / (POST) endpoint"""
-    print("\n📤 Testing / (POST) endpoint...")
+    """Test the / (POST) endpoint with form-data"""
+    print("\n📤 Testing / (POST) endpoint with form-data...")
     
     if not os.path.exists(image_path):
         print(f"❌ Image file not found: {image_path}")
         return False
     
-    # Encode image to base64
-    base64_image = encode_image_to_base64(image_path)
-    
     # Prepare test data with multiple timestamps
-    test_data = {
-        "sessionId": session_id,
-        "inputs": [
-            {"timestamp": 1.5, "file": base64_image},
-            {"timestamp": 3.2, "file": base64_image},
-            {"timestamp": 5.8, "file": base64_image}
-        ]
+    timestamps = [1.5, 3.2, 5.8]
+    
+    # Prepare form data
+    form_data = {
+        'sessionId': session_id,
+        'timestamps': json.dumps(timestamps)
     }
     
-    response = requests.post(f"{BASE_URL}/", json=test_data)
+    # Prepare files - using same image for multiple timestamps
+    files = []
+    file_handles = []
     
-    if response.status_code == 200:
-        data = response.json()
-        print(f"✅ Inputs uploaded successfully! Inputs count: {data['inputsCount']}")
-        return True
-    else:
-        print(f"❌ Failed to upload inputs: {response.status_code} - {response.text}")
-        return False
+    try:
+        for i, timestamp in enumerate(timestamps):
+            file_handle = open(image_path, 'rb')
+            file_handles.append(file_handle)
+            files.append(('files', (f'test_{i}.jpg', file_handle, 'image/jpeg')))
+        
+        response = requests.post(f"{BASE_URL}/", data=form_data, files=files)
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(f"✅ Files uploaded successfully!")
+            print(f"   Inputs count: {data['inputsCount']}")
+            print(f"   Uploaded files: {data['uploadedFiles']}")
+            return True
+        else:
+            print(f"❌ Failed to upload files: {response.status_code} - {response.text}")
+            return False
+            
+    finally:
+        # Close all file handles
+        for file_handle in file_handles:
+            file_handle.close()
 
 def test_end_session(session_id: str) -> Dict[str, Any]:
     """Test the /end endpoint"""

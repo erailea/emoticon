@@ -17,7 +17,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
 
   # Optional: Add a simple nginx reverse proxy for production
   # nginx:
@@ -30,10 +29,6 @@ services:
   #   depends_on:
   #     - emoticon-api
   #   restart: unless-stopped
-
-networks:
-  default:
-    name: emoticon-network
 
 volumes:
   storage:

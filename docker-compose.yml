@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  emoticon-api:
+    build: .
+    container_name: emoticon-analysis-api
+    ports:
+      - "8765:8000"
+    volumes:
+      - ./storage:/app/storage
+      - ./test.jpg:/app/test.jpg
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a simple nginx reverse proxy for production
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: emoticon-nginx
+  #   ports:
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf
+  #   depends_on:
+  #     - emoticon-api
+  #   restart: unless-stopped
+
+networks:
+  default:
+    name: emoticon-network
+
+volumes:
+  storage:
+    driver: local 

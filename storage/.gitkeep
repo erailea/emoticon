@@ -1,0 +1,2 @@
+# This file ensures the storage directory is created and maintained in git
+# Session data will be stored here as JSON files 
